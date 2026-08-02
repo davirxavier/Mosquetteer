@@ -9,6 +9,9 @@
     "type": "git",
     "url": "https://github.com/davirxavier/Mosquetteer.git"
   },
+  "build": {
+    "srcDir": "src"
+  },
   "authors":
   [
     {
