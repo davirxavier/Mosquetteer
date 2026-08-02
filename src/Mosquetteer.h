@@ -216,7 +216,10 @@ public:
                 continue;
             }
 
-            def.cb = cb;
+            if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_COMMAND))
+            {
+                def.cb = cb;
+            }
         }
     }
 
@@ -224,7 +227,7 @@ public:
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
-     * @return
+     * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
     int sendState(const char *id, const char *val)
     {
@@ -246,7 +249,7 @@ public:
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
-     * @return
+     * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
     int sendState(const char *id, bool val)
     {
@@ -259,7 +262,7 @@ public:
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
-     * @return
+     * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
     int sendState(const char *id, char val)
     {
@@ -272,7 +275,7 @@ public:
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
-     * @return
+     * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
     int sendState(const char *id, const std::string &val)
     {
@@ -283,7 +286,7 @@ public:
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
-     * @return
+     * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
     int sendState(const char *id, const String &val)
     {
@@ -294,7 +297,7 @@ public:
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
-     * @return
+     * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
     template <typename T>
     requires std::is_integral_v<T>
@@ -309,7 +312,7 @@ public:
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
-     * @return
+     * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
     template <typename T>
     requires std::is_floating_point_v<T>
