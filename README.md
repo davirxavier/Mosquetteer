@@ -3,6 +3,19 @@
 > A lightweight ESP32 library for exposing devices to Home Assistant
 > over MQTT with automatic device discovery.
 
+- [Mosquetteer](#mosquetteer)
+    * [Features](#features)
+    * [Supported Entity Types](#supported-entity-types)
+- [Quick Start](#quick-start)
+- [Defining Entities](#defining-entities)
+- [Entity Configuration](#entity-configuration)
+- [Publishing State](#publishing-state)
+    * [Return Value](#return-value)
+    * [Example](#example)
+- [Receiving Commands](#receiving-commands)
+- [Device Discovery](#device-discovery)
+- [TLS Support](#tls-support)
+
 ---
 
 ## Features
