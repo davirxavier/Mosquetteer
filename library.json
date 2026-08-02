@@ -1,0 +1,25 @@
+{
+  "name": "Mosquetteer",
+  "version": "0.0.1",
+  "keywords": "wifi,wi-fi,esp,esp32,espressif32,nodemcu,wemos,arduino",
+  "description": "A lightweight MQTT and Home Assistant integration wrapper for ESP32 devices.",
+  "frameworks": "arduino",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/davirxavier/Mosquetteer.git"
+  },
+  "authors":
+  [
+    {
+      "name": "D. Xavier",
+      "email": "davix@noreply.com",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "platforms":
+  [
+    "esp32"
+  ]
+}
