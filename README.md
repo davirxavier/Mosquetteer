@@ -254,41 +254,130 @@ use the `mqtts://` protocol on the client URI before calling `begin()`.
 
 ```cpp
 #include <Arduino.h>
+#include <WiFi.h>
 #include <Mosquetteer.h>
+
+// -----------------------------------------------------------------------------
+// Configuration
+// -----------------------------------------------------------------------------
+
+constexpr char WIFI_SSID[] = "ssid";
+constexpr char WIFI_PASSWORD[] = "password";
+
+constexpr char MQTT_URI[] = "mqtts://192.168.100.1:8883";
+constexpr char MQTT_USERNAME[] = "esp32";
+constexpr char MQTT_PASSWORD[] = "password";
+
+constexpr char DEVICE_ID[] = "pressure_station";
+constexpr char DEVICE_NAME[] = "Pressure Sensor";
+
+constexpr char PRESSURE_ID[] = "pressure";
+constexpr char ENABLED_ID[] = "enabled";
+
+// -----------------------------------------------------------------------------
+// CA Certificate
+// -----------------------------------------------------------------------------
+
+const char* CA_CERT = R"EOF(
+-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+)EOF";
+
+// -----------------------------------------------------------------------------
+// Globals
+// -----------------------------------------------------------------------------
 
 Mosquetteer mqtt;
 
-void setup() {
-    mqtt.setClientConfig("mqtt://192.168.1.100:1883");
+uint32_t pressure = 1000;
+unsigned long lastUpdate = 0;
+
+// -----------------------------------------------------------------------------
+// Setup
+// -----------------------------------------------------------------------------
+
+void connectWiFi()
+{
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    Serial.print("Connecting to WiFi");
+
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(250);
+        Serial.print(".");
+    }
+
+    Serial.println("\nConnected.");
+}
+
+void configureMQTT()
+{
+    mqtt.setClientConfig(
+        MQTT_URI,
+        MQTT_USERNAME,
+        MQTT_PASSWORD
+    );
+
+    mqtt.setTlsConfig(CA_CERT);
 
     mqtt.setDeviceInfo(
-        "weather_station",
-        "Weather Station"
+        DEVICE_ID,
+        DEVICE_NAME
     );
+}
 
-    MosquetteerShared::SensorConfig tempCfg;
-    tempCfg.deviceClass = MosquetteerClasses::TEMPERATURE;
-    tempCfg.stateClass = MosquetteerShared::MEASUREMENT;
-    strcpy(tempCfg.unit.unit, "°C");
+void defineEntities()
+{
+    MosquetteerShared::SensorConfig pressureCfg;
+
+    pressureCfg.deviceClass = MosquetteerClasses::ATMOSPHERIC_PRESSURE;
+    strcpy(pressureCfg.unit.unit, "hPa");
 
     mqtt.define(
-        "temperature",
-        "Temperature",
+        PRESSURE_ID,
+        "Pressure",
         MosquetteerShared::SENSOR,
-        &tempCfg
+        &pressureCfg
     );
 
     mqtt.define(
-        "humidity",
-        "Humidity",
-        MosquetteerShared::SENSOR
+        ENABLED_ID,
+        "Enabled",
+        MosquetteerShared::SWITCH
     );
 
+    mqtt.onCommand(ENABLED_ID, [](const MosquetteerProp& value)
+    {
+        Serial.printf(
+            "Switch changed: %s (changed=%s)\n",
+            value.toString(),
+            value.hasChanged ? "true" : "false"
+        );
+    });
+}
+
+void setup()
+{
+    Serial.begin(115200);
+    connectWiFi();
+    configureMQTT();
+    defineEntities();
     mqtt.begin();
 }
 
-void loop() {
-    mqtt.sendState("temperature", 22.8);
-    mqtt.sendState("humidity", 41);
+// -----------------------------------------------------------------------------
+// Main Loop
+// -----------------------------------------------------------------------------
+
+void loop()
+{
+    if (millis() - lastUpdate >= 3000)
+    {
+        pressure++;
+        mqtt.sendState(PRESSURE_ID, pressure);
+        lastUpdate = millis();
+    }
 }
 ```
