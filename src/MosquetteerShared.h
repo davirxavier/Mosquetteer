@@ -10,7 +10,7 @@
 #include <MosquetteerClasses.h>
 #include <mqtt_client.h>
 
-#define MQTTO_ENABLE_LOGGING
+// #define MQTTO_ENABLE_LOGGING
 
 #ifdef MQTTO_ENABLE_LOGGING
 #define MQTTO_PRINT_HEADER Serial.print("[MOSQUETTEER] ")
@@ -111,6 +111,11 @@ public:
     const char* toString() const
     {
         return this->data;
+    }
+
+    bool isOnState() const
+    {
+        return strcasecmp(MQ_HA_PAYLOAD_AVAILABLE, data) == 0;
     }
 
     /**
