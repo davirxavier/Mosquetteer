@@ -215,11 +215,7 @@ public:
             {
                 continue;
             }
-
-            if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_COMMAND))
-            {
-                def.cb = cb;
-            }
+            def.cb = cb;
         }
     }
 
