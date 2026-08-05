@@ -236,7 +236,21 @@ public:
 
             char topic[MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, nullptr)]{};
             MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, topic);
-            return esp_mqtt_client_enqueue(handle, topic, val, strlen(val), 1, true, true);
+            if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_EVENT_TYPES))
+            {
+                JsonDocument doc;
+                doc["event_type"] = val;
+                size_t len = measureJson(doc)+1;
+                char buf[len]{};
+                serializeJson(doc, buf, len);
+                MQTTO_LOGFN("Sending state update to topic %s, with data: %s", topic, buf);
+                return esp_mqtt_client_enqueue(handle, topic, buf, strlen(buf), 1, true, true);
+            }
+            else
+            {
+                MQTTO_LOGFN("Sending state update to topic %s, with data: %s", topic, val);
+                return esp_mqtt_client_enqueue(handle, topic, val, strlen(val), 1, true, true);
+            }
         }
         return -3;
     }

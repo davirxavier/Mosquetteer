@@ -79,7 +79,7 @@
 
 #define MQ_HA_COMMAND_TEMPLATE R"({"id":"%s","val":"{{ value }}"})"
 #define MQ_HA_COMMAND_TEMPLATE_SEARCH R"({"id":")"
-#define MQ_UNSET_VAL_VALID(v) std::isnan(v)
+#define MQ_UNSET_VAL_VALID(v) !std::isnan(v)
 
 class MosquetteerProp
 {
@@ -210,6 +210,9 @@ namespace MosquetteerShared
 
         // Uses payload_press
         CAP_PRESS          = 1 << 4,
+
+        // Event types
+        CAP_EVENT_TYPES    = 1 << 5,
     };
 
     inline constexpr uint16_t capabilities[] = {
@@ -226,7 +229,7 @@ namespace MosquetteerShared
         // TEXT
         CAP_STATE | CAP_COMMAND,
         // EVENT
-        CAP_STATE
+        CAP_STATE | CAP_EVENT_TYPES
     };
 
     inline bool hasCapability(Type t, Capability cap)
@@ -293,6 +296,11 @@ namespace MosquetteerShared
     inline bool isValid(const char *val)
     {
         return val != nullptr && strlen(val) > 0;
+    }
+
+    inline bool isValid(void *p)
+    {
+        return p != nullptr;
     }
 
     inline bool isValid(EntityMode val)
@@ -492,9 +500,28 @@ namespace MosquetteerShared
 
     struct EventConfig : BaseConfig
     {
+        /**
+         * Array of event type cstrings, should be defined in a global scope.
+         */
+        const char **eventTypes = nullptr;
+        double eventTypeCount = MQ_UNSET_VAL;
+
         void setConfig(JsonObject& doc) const override
         {
             setBaseConfig(doc);
+
+            if (isValid(eventTypes) && isValid(eventTypeCount))
+            {
+                JsonArray arr = doc["event_types"].to<JsonArray>();
+                for (int i = 0; i < eventTypeCount; i++)
+                {
+                    const char *type = eventTypes[i];
+                    if (isValid(type))
+                    {
+                        arr.add(type);
+                    }
+                }
+            }
         }
 
         [[nodiscard]] std::unique_ptr<BaseConfig> clone() const override
