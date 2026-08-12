@@ -566,6 +566,11 @@ private:
                 MQTTO_LOGFN("State topic: %s", buffer);
             }
 
+            if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_RETAIN))
+            {
+                obj["retain"] = true;
+            }
+
             if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_COMMAND))
             {
                 snprintf(buffer, MQ_CLIENT_BUFSIZE, MQ_HA_COMMAND_TEMPLATE, def.id.get());
@@ -635,7 +640,9 @@ private:
         }
 
         MQTTO_LOG("Generated json for device: ");
+#ifdef MQTTO_ENABLE_LOGGING
         serializeJson(rootDoc, Serial);
+#endif
         MQTTO_LOGNW();
 
         size_t len = measureJson(rootDoc);

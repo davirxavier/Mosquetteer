@@ -213,6 +213,9 @@ namespace MosquetteerShared
 
         // Event types
         CAP_EVENT_TYPES    = 1 << 5,
+
+        // If command should be retained
+        CAP_RETAIN         = 1 << 6,
     };
 
     inline constexpr uint16_t capabilities[] = {
@@ -221,7 +224,7 @@ namespace MosquetteerShared
         // BINARY_SENSOR
         CAP_STATE | CAP_PAYLOAD_ON_OFF,
         // SWITCH
-        CAP_STATE | CAP_COMMAND | CAP_PAYLOAD_ON_OFF | CAP_STATE_ON_OFF,
+        CAP_STATE | CAP_COMMAND | CAP_PAYLOAD_ON_OFF | CAP_STATE_ON_OFF | CAP_RETAIN,
         // BUTTON
         CAP_COMMAND | CAP_PRESS,
         // NUMBER
