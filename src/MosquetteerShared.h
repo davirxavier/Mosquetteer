@@ -145,6 +145,7 @@ namespace MosquetteerShared
         NUMBER,
         TEXT,
         EVENT,
+        SELECT,
     };
 
     inline const char *typeName[] = {
@@ -154,7 +155,8 @@ namespace MosquetteerShared
         "button",
         "number",
         "text",
-        "event"
+        "event",
+        "select"
     };
 
     inline const char *iconByType[] = {
@@ -165,11 +167,12 @@ namespace MosquetteerShared
         "mdi:numeric",
         "mdi:form-textbox",
         "mdi:bell-ring",
+        "mdi:dropdown-menu"
     };
 
     inline bool isTypeInvalid(int t)
     {
-        return t < SENSOR || t > EVENT;
+        return t < SENSOR || t > SELECT;
     }
 
     inline const char *getIconByType(Type t)
@@ -216,6 +219,9 @@ namespace MosquetteerShared
 
         // If command should be retained
         CAP_RETAIN         = 1 << 6,
+
+        // Select options
+        CAP_OPTIONS        = 1 << 7,
     };
 
     inline constexpr uint16_t capabilities[] = {
@@ -232,7 +238,9 @@ namespace MosquetteerShared
         // TEXT
         CAP_STATE | CAP_COMMAND,
         // EVENT
-        CAP_STATE | CAP_EVENT_TYPES
+        CAP_STATE | CAP_EVENT_TYPES,
+        // SELECT
+        CAP_STATE | CAP_COMMAND | CAP_OPTIONS,
     };
 
     inline bool hasCapability(Type t, Capability cap)
@@ -530,6 +538,38 @@ namespace MosquetteerShared
         [[nodiscard]] std::unique_ptr<BaseConfig> clone() const override
         {
             return std::make_unique<EventConfig>(*this);
+        }
+    };
+
+    struct SelectConfig : BaseConfig
+    {
+        /**
+         * Array of options cstrings, should be defined in a global scope.
+         */
+        const char **options = nullptr;
+        double optionsCount = MQ_UNSET_VAL;
+
+        void setConfig(JsonObject& doc) const override
+        {
+            setBaseConfig(doc);
+
+            if (isValid(options) && isValid(optionsCount))
+            {
+                JsonArray arr = doc["options"].to<JsonArray>();
+                for (int i = 0; i < optionsCount; i++)
+                {
+                    const char *type = options[i];
+                    if (isValid(type))
+                    {
+                        arr.add(type);
+                    }
+                }
+            }
+        }
+
+        [[nodiscard]] std::unique_ptr<BaseConfig> clone() const override
+        {
+            return std::make_unique<SelectConfig>(*this);
         }
     };
 
