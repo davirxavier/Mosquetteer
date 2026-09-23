@@ -42,6 +42,9 @@ Currently supported Home Assistant entities:
 - Number
 - Text
 - Event
+- Select
+- Image
+- Wrapping custom topics
 
 Additional entity types may be added in future releases.
 
@@ -144,6 +147,95 @@ Common configuration options include:
 - Availability options
 
 The available fields depend on the entity type.
+
+## Select Entity
+
+The select entity allows you to expose a dropdown menu of predefined options to Home Assistant. 
+To define a select entity, configure a MosquetteerShared::SelectConfig with an array of C-strings representing your options and the total option count.
+
+```cpp
+const char* fanSpeeds[] = {"Low", "Medium", "High"};
+
+MosquetteerShared::SelectConfig selectCfg;
+selectCfg.options = fanSpeeds;
+selectCfg.optionsCount = 3;
+
+mqtt.define(
+    "fan_speed",
+    "Fan Speed",
+    MosquetteerShared::SELECT,
+    &selectCfg
+);
+```
+
+Commands selected from the Home Assistant UI are received via the standard onCommand() callback.
+
+> The options array must remain valid for the lifetime of the entity. Define it with static or global storage rather than as a temporary local variable.
+
+## Image Entity
+
+The image entity allows you to send binary image payloads directly to Home Assistant. 
+Configure it using MosquetteerShared::ImageConfig to specify the image MIME type via the ``binaryConfig.contentType`` property.
+
+```cpp
+MosquetteerShared::ImageConfig imgCfg;
+imgCfg.binaryConfig.contentType = "image/jpeg";
+
+mqtt.define(
+    "camera_feed",
+    "Camera Feed",
+    MosquetteerShared::IMAGE,
+    &imgCfg
+);
+```
+
+To publish an image, use an overloaded sendState() method that accepts the entity ID, a pointer to the binary data, and the data length as a size_t.
+
+```cpp
+// Assuming `imageBuffer` holds your data and `imageLen` is its size in bytes
+mqtt.sendState("camera_feed", (const char*)imageBuffer, imageLen);
+```
+
+> The content-type char array must remain valid for the lifetime of the entity. Define it with static or global storage rather than as a temporary local variable.
+
+## Custom Topic
+
+The custom_topic entity lets you route arbitrary MQTT topics through the Mosquetteer client while bypassing standard Home Assistant capabilities.
+
+Configure it using MosquetteerShared::CustomConfig, specifying the sendTopic and receiveTopic strings. You can also configure publish behavior with options such as qos, retain, and enqueue.
+
+This is useful when you need to send and receive MQTT messages without running multiple MQTT clients on your board.
+
+```cpp
+MosquetteerShared::CustomConfig customCfg;
+customCfg.sendTopic = "custom/device/tx";
+customCfg.receiveTopic = "custom/device/rx";
+customCfg.qos = 1;
+customCfg.retain = false;
+customCfg.enqueue = false;
+
+mqtt.define(
+    "custom_bridge",
+    "Custom Bridge",
+    MosquetteerShared::CUSTOM_TOPIC,
+    &customCfg
+);
+```
+
+To publish raw data to the sendTopic, use sendState() with the payload and length.
+
+```cpp
+mqtt.sendState("custom_bridge", rawPayload, payloadLength);
+```
+
+To listen for messages on the receiveTopic, register a callback using onData() instead of onCommand(). 
+The DataCallback provides the raw data buffer and length.
+
+```cpp
+mqtt.onData("custom_bridge", [](const char* data, size_t len) {
+    // Process incoming raw data
+});
+```
 
 ---
 
