@@ -220,34 +220,94 @@ public:
     }
 
     /**
+     * Registers a data callback, for when you want to receive the raw data from the topic.
+     */
+    void onData(const char *id, const MosquetteerShared::DataCallback dcb)
+    {
+        for (auto &def : definitions)
+        {
+            if (strcasecmp(def.id.get(), id) != 0)
+            {
+                continue;
+            }
+            def.dcb = dcb;
+        }
+    }
+
+    /**
+     * Registers a callback to be executed after startup is complete.
+     */
+    void onEvent(const MosquetteerShared::EventCallback cb)
+    {
+        eventCallback = cb;
+    }
+
+    /**
      * Sends a state update to home assistant for a specified entity.
      * @param id Entity id.
      * @param val Value to be sent.
      * @return >= 0 if success, -1 for failure and -2 for queue overflow.
      */
-    int sendState(const char *id, const char *val)
+    int sendState(const char *id, const char *val, size_t len = 0)
     {
         for (auto &def : definitions)
         {
-            if (strcasecmp(def.id.get(), id) != 0 || !MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_STATE))
+            if (strcasecmp(def.id.get(), id) != 0 ||
+                (!MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_STATE) &&
+                 !MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_IMAGE) &&
+                 !MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_CUSTOM)))
             {
                 continue;
             }
 
-            char topic[MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, nullptr)]{};
-            MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, topic);
             if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_EVENT_TYPES))
             {
+                char topic[MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, nullptr)]{};
+                MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, topic);
+
                 JsonDocument doc;
                 doc["event_type"] = val;
-                size_t len = measureJson(doc)+1;
-                char buf[len]{};
-                serializeJson(doc, buf, len);
+                size_t jsonLen = measureJson(doc)+1;
+                char buf[jsonLen]{};
+                serializeJson(doc, buf, jsonLen);
                 MQTTO_LOGFN("Sending state update to topic %s, with data: %s", topic, buf);
                 return esp_mqtt_client_enqueue(handle, topic, buf, strlen(buf), 1, true, true);
             }
+            else if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_IMAGE))
+            {
+                char topic[MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_IMAGE_SUFFIX, nullptr)]{};
+                MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_IMAGE_SUFFIX, topic);
+                MQTTO_LOGFN("Sending state update to topic %s, with binary data od len: %zu", topic, len);
+                return esp_mqtt_client_publish(handle, topic, val, len, 1, true);
+            }
+            else if (def.type == MosquetteerShared::CUSTOM_TOPIC && MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_CUSTOM))
+            {
+                auto* child = static_cast<MosquetteerShared::CustomConfig*>(def.config.get());
+                if (!MosquetteerShared::isValid(child->sendTopic))
+                {
+                    MQTTO_LOGN("Send queue for custom topic entity is invalid.");
+                    return -1;
+                }
+
+                if (child->enqueue)
+                {
+                    MQTTO_LOGFN("Queueing custom topic entity message for topic %s, with length %zu", child->sendTopic, len);
+                    return esp_mqtt_client_enqueue(handle, child->sendTopic, val, len, child->qos, child->retain, true);
+                }
+                else
+                {
+                    MQTTO_LOGFN("Sending custom topic entity message for topic %s, with length %zu", child->sendTopic, len);
+                    return esp_mqtt_client_publish(handle, child->sendTopic, val, len, child->qos, child->retain);
+                }
+
+                MQTTO_LOGN("Config for custom topic entity not set or invalid, skipping message.");
+                return -1;
+            }
             else
             {
+                char topic[MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, nullptr)]{};
+                MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_STATE_SUFFIX, topic);
+
                 MQTTO_LOGFN("Sending state update to topic %s, with data: %s", topic, val);
                 return esp_mqtt_client_enqueue(handle, topic, val, strlen(val), 1, true, true);
             }
@@ -333,7 +393,20 @@ public:
         return sendState(id, buf);
     }
 
+    esp_mqtt_client_handle_t getHandle()
+    {
+        return handle;
+    }
+
 private:
+    void sendEvent(MosquetteerShared::Event event)
+    {
+        if (eventCallback != nullptr)
+        {
+            eventCallback(event);
+        }
+    }
+
     size_t getDeviceTopic(char *out) const
     {
         size_t topicLen = strlen(MQ_HA_DISCOVERY_PREFIX) + strlen(deviceId) + strlen(MQ_HA_DISCOVERY_SUFFIX) + 4;
@@ -371,6 +444,7 @@ private:
             MQTTO_LOGN("MQTT_EVENT_DISCONNECTED");
             stopTimer(&discoveryTimer, DISCOVERY);
             stopTimer(&availabilityTimer, AVAILABILITY);
+            sendEvent(MosquetteerShared::DISCONNECTED);
             break;
         case MQTT_EVENT_SUBSCRIBED:
             MQTTO_LOGFN("MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -409,6 +483,10 @@ private:
                 {
                     parseCallback(event->data, event->data_len);
                 }
+                else if (discoveryState == MosquetteerShared::DISCOVERY_OK)
+                {
+                    parseCustomCallback(event->topic, event->topic_len, event->data, event->data_len);
+                }
                 break;
             }
         case MQTT_EVENT_ERROR:
@@ -435,6 +513,28 @@ private:
         }
     }
 
+    void parseCustomCallback(const char *topic, size_t topicLen, const char *data, size_t dataLen)
+    {
+        for (auto &def : definitions)
+        {
+            if (def.type == MosquetteerShared::CUSTOM_TOPIC &&
+                MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_CUSTOM) &&
+                def.config != nullptr &&
+                def.dcb != nullptr)
+            {
+                auto* config = static_cast<MosquetteerShared::CustomConfig*>(def.config.get());
+
+                if (config->receiveTopic == nullptr || strncasecmp(topic, config->receiveTopic, topicLen) != 0)
+                {
+                    continue;
+                }
+
+                MQTTO_LOGFN("Sending data to custom entity with id %s", def.id.get());
+                def.dcb(data, dataLen);
+            }
+        }
+    }
+
     void parseCallback(const char *data, size_t len)
     {
         JsonDocument doc;
@@ -448,7 +548,7 @@ private:
         const char *id = doc["id"];
         for (auto &def : definitions)
         {
-            if (strcasecmp(def.id.get(), id) != 0 || def.cb == nullptr)
+            if (strcasecmp(def.id.get(), id) != 0 || (def.cb == nullptr && def.dcb == nullptr))
             {
                 continue;
             }
@@ -458,7 +558,16 @@ private:
             MosquetteerProp prop(val, hash != def.lastValueHash);
             def.lastValueHash = hash;
             MQTTO_LOGFN("Calling callback for %s, with data %s", def.id.get(), prop.toString());
-            def.cb(prop);
+
+            if (def.cb != nullptr)
+            {
+                def.cb(prop);
+            }
+
+            if (def.dcb != nullptr)
+            {
+                def.dcb(data, len);
+            }
         }
     }
 
@@ -550,6 +659,27 @@ private:
         JsonObject comps = rootDoc["cmps"].to<JsonObject>();
         for (auto &def : definitions)
         {
+            if (def.type == MosquetteerShared::CUSTOM_TOPIC &&
+                MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_CUSTOM))
+            {
+                if (def.config == nullptr)
+                {
+                    MQTTO_LOGN("Config not set for custom topic entity, skipping.");
+                    continue;
+                }
+
+                auto* child = static_cast<MosquetteerShared::CustomConfig*>(def.config.get());
+                if (!MosquetteerShared::isValid(child->receiveTopic))
+                {
+                    MQTTO_LOGN("Receive queue for custom topic entity is invalid.");
+                    continue;
+                }
+
+                MQTTO_LOGFN("Subscribe to custom topic: %s", child->receiveTopic);
+                esp_mqtt_client_subscribe(handle, child->receiveTopic, 1);
+                continue;
+            }
+
             MQTTO_LOGFN("Making definitions for %s.", def.id.get());
             snprintf(buffer, MQ_CLIENT_BUFSIZE, "%s_%s", deviceId, def.id.get());
 
@@ -598,6 +728,12 @@ private:
             if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_PRESS))
             {
                 obj["payload_press"] = MQ_HA_PAYLOAD_AVAILABLE;
+            }
+
+            if (MosquetteerShared::hasCapability(def.type, MosquetteerShared::CAP_IMAGE))
+            {
+                MosquetteerShared::getTopic(def.id.get(), deviceId, MQ_HA_IMAGE_SUFFIX, buffer);
+                obj["image_topic"] = buffer;
             }
 
             if (def.config != nullptr)
@@ -683,6 +819,7 @@ private:
         {
             stopTimer(&availabilityTimer, AVAILABILITY);
             hasAvailabilityTimer = false;
+            sendEvent(MosquetteerShared::CONNECTED);
         }
     }
 
@@ -791,6 +928,7 @@ private:
     bool isAvailabilityOn = false;
     int availabilityCounter = 0;
     const char *cacert = nullptr;
+    MosquetteerShared::EventCallback eventCallback = nullptr;
 };
 
 #endif //MOSQUETTEER_H

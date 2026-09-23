@@ -24,5 +24,8 @@
   "platforms":
   [
     "esp32"
-  ]
+  ],
+  "dependencies": {
+    "bblanchon/ArduinoJson": "^7.4.3"
+  }
 }

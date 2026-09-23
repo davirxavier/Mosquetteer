@@ -53,6 +53,10 @@
 #define MQ_HA_SET_SUFFIX "set"
 #endif
 
+#ifndef MQ_HA_IMAGE_SUFFIX
+#define MQ_HA_IMAGE_SUFFIX "image"
+#endif
+
 #ifndef MQ_HA_PAYLOAD_AVAILABLE
 #define MQ_HA_PAYLOAD_AVAILABLE "on"
 #endif
@@ -146,6 +150,9 @@ namespace MosquetteerShared
         TEXT,
         EVENT,
         SELECT,
+        IMAGE,
+        CUSTOM_TOPIC,
+        INVALID,
     };
 
     inline const char *typeName[] = {
@@ -156,7 +163,9 @@ namespace MosquetteerShared
         "number",
         "text",
         "event",
-        "select"
+        "select",
+        "image",
+        "custom_topic",
     };
 
     inline const char *iconByType[] = {
@@ -167,12 +176,14 @@ namespace MosquetteerShared
         "mdi:numeric",
         "mdi:form-textbox",
         "mdi:bell-ring",
-        "mdi:dropdown-menu"
+        "mdi:dropdown-menu",
+        "mdi:image",
+        "mdi:topic"
     };
 
     inline bool isTypeInvalid(int t)
     {
-        return t < SENSOR || t > SELECT;
+        return t < SENSOR || t >= INVALID;
     }
 
     inline const char *getIconByType(Type t)
@@ -222,6 +233,13 @@ namespace MosquetteerShared
 
         // Select options
         CAP_OPTIONS        = 1 << 7,
+
+        // Image options
+        CAP_BINARY         = 1 << 8,
+        CAP_IMAGE          = 1 << 9,
+
+        // Custom
+        CAP_CUSTOM         = 1 << 10,
     };
 
     inline constexpr uint16_t capabilities[] = {
@@ -241,6 +259,10 @@ namespace MosquetteerShared
         CAP_STATE | CAP_EVENT_TYPES,
         // SELECT
         CAP_STATE | CAP_COMMAND | CAP_OPTIONS,
+        // IMAGE,
+        CAP_BINARY | CAP_IMAGE,
+        // CUSTOM_TOPIC
+        CAP_CUSTOM,
     };
 
     inline bool hasCapability(Type t, Capability cap)
@@ -387,6 +409,19 @@ namespace MosquetteerShared
             if (isValid(unit))
             {
                 doc["unit_of_measurement"] = unit;
+            }
+        }
+    };
+
+    struct BinaryConfig
+    {
+        const char *contentType; // Data content type string, eg "image/jpeg".
+
+        void setConfig(JsonObject &doc) const
+        {
+            if (isValid(contentType))
+            {
+                doc["content_type"] = contentType;
             }
         }
     };
@@ -573,8 +608,49 @@ namespace MosquetteerShared
         }
     };
 
+    struct ImageConfig : BaseConfig
+    {
+        BinaryConfig binaryConfig;
+
+        void setConfig(JsonObject& doc) const override
+        {
+            setBaseConfig(doc);
+            binaryConfig.setConfig(doc);
+        }
+
+        [[nodiscard]] std::unique_ptr<BaseConfig> clone() const override
+        {
+            return std::make_unique<ImageConfig>(*this);
+        }
+    };
+
+    struct CustomConfig : BaseConfig
+    {
+        const char *sendTopic; // Topic to send data with sendState
+        const char *receiveTopic; // Topic to receive data
+        int qos = 1;
+        bool retain = false;
+        bool enqueue = false;
+
+        void setConfig(JsonObject& doc) const override
+        {
+        }
+
+        [[nodiscard]] std::unique_ptr<BaseConfig> clone() const override
+        {
+            return std::make_unique<CustomConfig>(*this);
+        }
+    };
+
+    enum Event
+    {
+        DISCONNECTED,
+        CONNECTED,
+    };
+
     typedef void (*Callback)(const MosquetteerProp& p);
-    inline std::function<void(MosquetteerProp)> OnChangeCallback;
+    typedef void (*DataCallback)(const char *data, size_t len);
+    typedef std::function<void(Event)> EventCallback;
 
     struct Definition
     {
@@ -583,6 +659,7 @@ namespace MosquetteerShared
         Type type;
         std::unique_ptr<BaseConfig> config;
         Callback cb = nullptr;
+        DataCallback dcb = nullptr;
         uint32_t lastValueHash = 0;
     };
 
